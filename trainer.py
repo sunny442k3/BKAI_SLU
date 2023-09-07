@@ -59,27 +59,52 @@ class Trainer:
         return precision(inputs, labels), recall(inputs, labels), f1(inputs, labels)
     #
 
-    def compute_acc(self, token_logits, intent_logits, labels): # labels = [token labels, intent labels]
+    def _match_size_label(self, lm_logits, token_logits, labels):
+        labels[0] = labels[0][:, :token_logits.size(1)]
+        labels[2] = labels[2][:, :lm_logits.size(1)]
+        d1 = token_logits.size(1) - labels[0].size(1)
+        d2 = lm_logits.size(1) - labels[2].size(1)
+        if d1:
+            labels[0] = torch.cat([labels[0], torch.ones((labels[0].size(0), d1)).to(self.device) * -100], dim=1)
+        if d2:
+            labels[2] = torch.cat([labels[2], torch.ones((labels[2].size(0), d2)).to(self.device) * -100], dim=1)
+        labels = [i.long() for i in labels]
+        return labels
+
+    def compute_acc(self, lm_logits, token_logits, intent_logits, labels): # labels = [token labels, intent labels, lm_labels]
+        # labels[0] = labels[0][:, :token_logits.size(1)]
+        # labels[2] = labels[2][:, :lm_logits.size(1)]
+        labels = self._match_size_label(lm_logits, token_logits, labels)
         acc = {
             "intent_acc": self._compute_acc(
-                intent_logits.argmax(-1).view(-1), labels[1].view(-1), self.model.n_intent_classes
+                intent_logits.argmax(-1).reshape(-1), labels[1].reshape(-1), self.model.n_intent_classes
             ),
             "token_acc": self._compute_acc(
-                token_logits.argmax(-1).view(-1), labels[0].view(-1), self.model.n_token_classes
+                token_logits.argmax(-1).reshape(-1), labels[0].reshape(-1), self.model.n_token_classes
+            ),
+            "lm_acc": self._compute_acc(
+                lm_logits.argmax(-1).reshape(-1), labels[2].reshape(-1), self.model.n_logit_classes
             )
         }
         return acc
     #
 
-    def compute_loss(self, token_logits, intent_logits, labels):
+    def compute_loss(self, lm_logits, token_logits, intent_logits, labels):
+        # labels[0] = labels[0][:, :token_logits.size(1)]
+        # labels[2] = labels[2][:, :lm_logits.size(1)]
+        labels = self._match_size_label(lm_logits, token_logits, labels)
         token_loss = self.criterion(
-            token_logits.view(-1, self.model.n_token_classes), labels[0].view(-1)
+            token_logits.reshape(-1, self.model.n_token_classes), labels[0].reshape(-1)
         )
         intent_loss = self.criterion(
-            intent_logits, labels[1].view(-1)
+            intent_logits, labels[1].reshape(-1)
         )
-        all_loss = (token_loss + intent_loss) / 2 
-        return token_loss, intent_loss, all_loss
+        lm_loss = self.criterion(
+            lm_logits.reshape(-1, self.model.n_logit_classes), labels[2].reshape(-1)
+        )
+        # all_loss = (token_loss + intent_loss) / 2
+        all_loss = token_loss + intent_loss + lm_loss 
+        return lm_loss, token_loss, intent_loss, all_loss
     #
 
     def forward(self, dataloader, fw_mode="train"):
@@ -97,12 +122,13 @@ class Trainer:
             X_batch = {k : v.to(self.device) for k, v in batch[0].items()}
             token_labels = batch[1].to(self.device)
             intent_labels = batch[2].to(self.device)
+            lm_labels = batch[3].to(self.device)
             with torch.set_grad_enabled(fw_mode=="train"):
                 with torch.autocast(self.device.type if self.device.type != 'mps' else 'cpu', enabled=self.amp):
-                    token_logits, intent_logits = self.model(X_batch)
-                    token_loss, intent_loss, all_loss = self.compute_loss(token_logits, intent_logits, [token_labels, intent_labels])
-                    acc = self.compute_acc(token_logits, intent_logits, [token_labels, intent_labels])
-                    mean_acc = (acc["intent_acc"][-1] + acc["token_acc"][-1]) / 2.0
+                    lm_logits, token_logits, intent_logits = self.model(X_batch)
+                    lm_loss, token_loss, intent_loss, all_loss = self.compute_loss(lm_logits, token_logits, intent_logits, [token_labels, intent_labels, lm_labels])
+                    acc = self.compute_acc(lm_logits, token_logits, intent_logits, [token_labels, intent_labels, lm_labels])
+                    mean_acc = (acc["intent_acc"][-1] + acc["token_acc"][-1] + acc["lm_acc"][-1]) / 3.0
             if fw_mode == "train":
                 self.optimizer.zero_grad(set_to_none=True)
                 self.scaler.scale(all_loss).backward()
@@ -155,17 +181,17 @@ class Trainer:
             self.save_checkpoint(checkpoint)
     #
 
-    def test(self, test_loader):
-        self.model.eval()
-        all_tokens = []
-        all_intents = []
-        for idx, batch in enumerate(test_loader, 1):
-            X_batch = {k: v.to(self.device) for k, v in batch[0].items()}
-            token_logits, intent_logits = self.model(X_batch)
-            token_logits = token_logits.argmax(-1).cpu().tolist()
-            intent_logits = intent_logits.argmax(-1).view(-1).cpu().tolist()
-            all_tokens += token_logits
-            all_intents += intent_logits
-            print("\r", end="")
-            print(f"\r {idx} / {len(test_loader)}", end = "" if idx != len(test_loader) else "\n")
-        return all_tokens, all_intents
+    # def test(self, test_loader):
+    #     self.model.eval()
+    #     all_tokens = []
+    #     all_intents = []
+    #     for idx, batch in enumerate(test_loader, 1):
+    #         X_batch = {k: v.to(self.device) for k, v in batch[0].items()}
+    #         lm_logits, token_logits, intent_logits = self.model(X_batch)
+    #         token_logits = token_logits.argmax(-1).cpu().tolist()
+    #         intent_logits = intent_logits.argmax(-1).view(-1).cpu().tolist()
+    #         all_tokens += token_logits
+    #         all_intents += intent_logits
+    #         print("\r", end="")
+    #         print(f"\r {idx} / {len(test_loader)}", end = "" if idx != len(test_loader) else "\n")
+    #     return all_tokens, all_intents

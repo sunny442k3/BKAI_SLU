@@ -73,7 +73,7 @@ def main():
     logs_data = make_labels(tokenizer, all_data)
     save_json("./dataset/train_token_labels.json", [i["label"] for i in logs_data])
     bk_err = []
-    for cc, (data, _label) in enumerate(zip(all_data, logs_data)):
+    for ct, (data, _label) in enumerate(zip(all_data, logs_data)):
         txt = data["input"]
         label = _label["label"]
         all_words = []
@@ -98,8 +98,8 @@ def main():
         ce = [i == j for i, j in zip(all_words, _label["names"])]
         ce = sum(ce)
         if ce != len(_label["names"]):
-            print(cc)
-            bk_err.append(cc)
+            print(ct)
+            bk_err.append(ct)
     if len(bk_err):
         print(f"[!] Found {len(bk_err)} items incorrect with label mask")
         save_json("./dataset/bk_error.json", bk_err)
