@@ -1,9 +1,37 @@
 
 import json
 import gdown
+import re
+
 # import kenlm
 # from pyctcdecode import Alphabet, BeamSearchDecoderCTC, LanguageModel
 
+def build_ngram_dataset(annotation_file, out_file="./full_text.txt"):
+    data = load_annotation(annotation_file)
+    chars_to_ignore_regex = '[\,\?\.\!\-\;\:\"]'
+    clean_txt = lambda txt: re.sub(chars_to_ignore_regex, '', txt.lower()).lower()
+    all_sen = [clean_txt(i["sentence"]) for i in data]
+    for i in range(len(all_sen)):
+        while "  " in all_sen[i]:
+            all_sen[i] = all_sen[i].replace("  ", " ")
+        while " %" in all_sen[i]:
+            all_sen[i] = all_sen[i].replace(" %", "%")
+    with open(out_file, "w") as file:
+        file.write(" ".join(all_sen))
+
+def align_ngram_set(ngram_path="./4gram.arpa"):
+    with open(ngram_path, "r") as read_file, open("./4gram_correct.arpa", "w") as write_file:
+        has_added_eos = False
+        for line in read_file:
+            if not has_added_eos and "ngram 1=" in line:
+                count=line.strip().split("=")[-1]
+                write_file.write(line.replace(f"{count}", f"{int(count)+1}"))
+            elif not has_added_eos and "<s>" in line:
+                write_file.write(line)
+                write_file.write(line.replace("<s>", "</s>"))
+                has_added_eos = True
+            else:
+                write_file.write(line)
 
 def drive_download(idx, output):
     url = 'https://drive.google.com/uc?id=' + idx
@@ -43,23 +71,6 @@ def weight_decay(model, weight_decay=0.01):
         },
     ]
     return optimizer_grouped_parameters
-
-# def get_decoder_ngram_model(tokenizer, ngram_lm_path):
-#     vocab_dict = tokenizer.get_vocab()
-#     sort_vocab = sorted((value, key) for (key, value) in vocab_dict.items())
-#     vocab = [x[1] for x in sort_vocab][:-2]
-#     vocab_list = vocab
-#     # convert ctc blank character representation
-#     vocab_list[tokenizer.pad_token_id] = ""
-#     # replace special characters
-#     vocab_list[tokenizer.unk_token_id] = ""
-#     # convert space character representation
-#     vocab_list[tokenizer.word_delimiter_token_id] = " "
-#     # specify ctc blank char index, since conventially it is the last entry of the logit matrix
-#     alphabet = Alphabet.build_alphabet(vocab_list, ctc_token_idx=tokenizer.pad_token_id)
-#     lm_model = kenlm.Model(ngram_lm_path)
-#     decoder = BeamSearchDecoderCTC(alphabet, language_model=LanguageModel(lm_model))
-#     return decoder
 
 MAP_INTENT = {
     'Giảm độ sáng của thiết bị': 0,

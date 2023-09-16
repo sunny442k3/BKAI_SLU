@@ -6,6 +6,27 @@ import soundfile as sf
 from torch.utils.data import Dataset
 import glob
 
+class WhisperDataset(Dataset):
+    def __init__(self, processor, root_path, files_id, labels=None):
+        self.processor = processor
+        self.root_path = root_path
+        self.files_id = files_id
+        self.labels = labels
+
+    def _process_sound_file(self, idx):
+        speech, samplerate  = sf.read(os.path.join(self.root_path, self.files_id[idx]))
+        chars_to_ignore_regex = '[\,\?\.\!\-\;\:\"]'
+        clean_txt = lambda txt: re.sub(chars_to_ignore_regex, '', txt.lower()).lower()
+        label = clean_txt(self.labels[idx]["sentence"]) if self.labels is not None else None
+        input_feature = self.processor(speech, text=label, sampling_rate=samplerate)
+        return input_feature
+
+    def __len__(self):
+        return len(self.files_id)
+
+    def __getitem__(self, idx):
+        data = self._process_sound_file(idx)
+        return {"input_features": data.input_features, "labels": data.labels if "labels" in data else None, "file_id": self.files_id[idx]}
 class Wav2VecDataset(Dataset):
 
     def __init__(self, root_path, files_id, labels=None):
@@ -18,6 +39,8 @@ class Wav2VecDataset(Dataset):
         chars_to_ignore_regex = '[\,\?\.\!\-\;\:\"]'
         clean_txt = lambda txt: re.sub(chars_to_ignore_regex, '', txt.lower()).lower()
         label = clean_txt(self.labels[idx]["sentence"]) if self.labels is not None else None
+        while label is not None and "  " in label:
+            label = label.replace("  ", " ")
         return {"input_values": speech, "sample_rate": samplerate, "label": label, "file": self.files_id[idx]}
         
     def __len__(self):
@@ -31,17 +54,19 @@ class BertDataset(Dataset):
     def __init__(self, all_text, labels=None, map_intent=None):
         self.all_text = all_text
         self.labels = labels # [Token cls, Intent cls]
-        self.map_intent = map_intent
+        self.map_intent = {k.lower().strip(): v for k, v in map_intent.items()} if map_intent is not None else None
 
     def _process_data(self, idx):
         chars_to_ignore_regex = '[\,\?\.\!\-\;\'\"]'
-        clean_txt = lambda txt: re.sub(chars_to_ignore_regex, '', txt.lower()).lower().replace("["," [ ").replace("]", " ] ").replace("  ", " ")
+        clean_txt = lambda txt: re.sub(chars_to_ignore_regex, '', txt.lower()).lower().replace("["," [ ").replace("]", " ] ")
         text = clean_txt(self.all_text[idx])
+        while "  " in text:
+            text = text.replace("  ", " ")
         # label = clean_txt(self.annotations[idx]["sentence_annotation"])
         if self.labels is None or self.map_intent is None:
             return text, None, None
         token_label = [0] + self.labels[0][idx] + [0]
-        intent_label = [self.map_intent[self.labels[1][idx]]]
+        intent_label = [self.map_intent[self.labels[1][idx].lower()]]
         return text, token_label, intent_label
 
     def __len__(self):
