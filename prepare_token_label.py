@@ -11,7 +11,7 @@ def load_notation(path):
 
 def save_json(path, data):
     with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f)
+        json.dump(data, f, ensure_ascii=False)
         f.close()
 
 def make_labels(tokenizer, all_data):
@@ -78,9 +78,12 @@ def main():
 
     logs_data = make_labels(tokenizer, all_data)
     logs_data[7023]["label"] = [0, 5, 0, 0, 0, 6, 0]
+    for idx, v in enumerate(logs_data):
+        logs_data[idx]["sentence"] = clean_text(annotations[idx]["sentence"])
+    
     logs_data = {k["file"]: v for k, v in zip(annotations, logs_data)}
 
-    save_json("./dataset/train_token_labels_20230909.json", {k: v["label"] for k, v in logs_data.items()})
+    save_json("./dataset/train_token_labels_20230909.json", {k: v for k, v in logs_data.items()})
     bk_err = []
     for ct, (data, _label) in enumerate(zip(all_data, logs_data.values())):
         txt = data["input"]
