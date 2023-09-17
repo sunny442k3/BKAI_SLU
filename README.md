@@ -1,11 +1,11 @@
-# Full pipeline
+## Full pipeline
 ![Alt text](./thumbnail/overview.png)
 
 ## Define task
 - Stage 1: Audio to text. Optimize parameter via CTC Loss
 - Stage 2: Text to entities. Token classify and sentence classify. Optimize pảaameter via Cross Entropy Loss
   - Entity: 
-    - Format: ```json {"type": "<TYPE>", "filler": "<FILLER>"}```
+    - Format: ```{"type": "<TYPE>", "filler": "<FILLER>"}```
     - Example: ```{"type": "command", "filler": "giảm"}, {"type": "device", "filler": "quạt"}```
   - Token classify:
     - Input: ```["kiểm","tra","giúp","tôi","mấy","cái","bóng","tròn","nhá"]```
