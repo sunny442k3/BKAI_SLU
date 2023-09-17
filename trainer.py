@@ -51,10 +51,12 @@ class Trainer:
     def _compute_acc(self, inputs, labels, num_classes, ignore_index=-100):
         inputs = inputs.cpu()
         labels = labels.cpu()
-        precision = torchmetrics.Precision(task="multiclass", average='micro', num_classes=num_classes, ignore_index=ignore_index)
-        recall = torchmetrics.Recall(task="multiclass", average='micro', num_classes=num_classes, ignore_index=ignore_index)
-        f1 = torchmetrics.F1Score(task="multiclass", num_classes=num_classes, ignore_index=ignore_index)
-        return precision(inputs, labels), recall(inputs, labels), f1(inputs, labels)
+        # precision = torchmetrics.Precision(task="multiclass", average='micro', num_classes=num_classes, ignore_index=ignore_index)
+        # recall = torchmetrics.Recall(task="multiclass", average='micro', num_classes=num_classes, ignore_index=ignore_index)
+        # f1 = torchmetrics.F1Score(task="multiclass", num_classes=num_classes, ignore_index=ignore_index)
+        acc = torchmetrics.Accuracy(task="multiclass", num_classes=self.model.n_token_classes)
+        return acc(inputs, labels)
+        # return precision(inputs, labels), recall(inputs, labels), f1(inputs, labels)
     #
 
     def _match_size_label(self, token_logits, labels):
@@ -65,18 +67,31 @@ class Trainer:
         labels = [i.long() for i in labels]
         return labels
 
-    def compute_acc(self, token_logits, intent_logits, labels): # labels = [token labels, intent labels, lm_labels]
-        labels = self._match_size_label(token_logits, labels)
-        acc = {
-            "intent_acc": self._compute_acc(
-                intent_logits.argmax(-1).reshape(-1), labels[1].reshape(-1), self.model.n_intent_classes
-            ),
-            "token_acc": self._compute_acc(
-                token_logits.argmax(-1).reshape(-1), labels[0].reshape(-1), self.model.n_token_classes
-            )
-        }
-        return acc
+    # def compute_acc(self, token_logits, intent_logits, labels): # labels = [token labels, intent labels, lm_labels]
+    #     labels = self._match_size_label(token_logits, labels)
+    #     acc = {
+    #         "intent_acc": self._compute_acc(
+    #             intent_logits.argmax(-1).reshape(-1), labels[1].reshape(-1), self.model.n_intent_classes
+    #         ),
+    #         "token_acc": self._compute_acc(
+    #             token_logits.argmax(-1).reshape(-1), labels[0].reshape(-1), self.model.n_token_classes
+    #         )
+    #     }
+    #     return acc
     #
+
+    def compute_acc(self, token_logits, intent_logits, labels):
+        labels = self._match_size_label(token_logits, labels)
+        token_logits = token_logits.argmax(-1)
+        intent_logits = intent_logits.argmax(-1)
+        acc = []
+        for i in range(token_logits.size(0)):
+            tmp_tk_logit = token_logits[i, :]
+            cp_tk = (tmp_tk_logit == labels[0][i, :]).long().mean()
+            tmp_it_logit = intent_logits[i]
+            cp_it = (tmp_it_logit == labels[1][i]).long()
+            acc.append(1 if (cp_tk + cp_it) == 2.0 else 0)
+        return torch.tensor(acc).mean()
 
     def compute_loss(self, token_logits, intent_logits, labels):
         labels = self._match_size_label(token_logits, labels)
@@ -110,7 +125,7 @@ class Trainer:
                     token_logits, intent_logits = self.model(X_batch)
                     token_loss, intent_loss, all_loss = self.compute_loss(token_logits, intent_logits, [token_labels, intent_labels])
                     acc = self.compute_acc(token_logits, intent_logits, [token_labels, intent_labels])
-                    mean_acc = (acc["intent_acc"][-1] + acc["token_acc"][-1]) / 2.0
+                    # mean_acc = (acc["intent_acc"][-1] + acc["token_acc"][-1]) / 2.0
             if fw_mode == "train":
                 self.optimizer.zero_grad(set_to_none=True)
                 self.scaler.scale(all_loss).backward()
@@ -120,9 +135,9 @@ class Trainer:
                 if self.scheduler is not None:
                     self.scheduler.step()
             loss_his.append(all_loss.item())
-            acc_his.append(mean_acc.item())
+            acc_his.append(acc.item())
             print("\r", end="")
-            print(f"{fw_mode.capitalize()} step: {idx} / {N} - loss: {all_loss.item():.5f} - acc: {mean_acc.item():.4f}", end="" if idx != N else "\n")
+            print(f"{fw_mode.capitalize()} step: {idx} / {N} - loss: {all_loss.item():.5f} - acc: {acc.item():.4f}", end="" if idx != N else "\n")
 
         loss = sum(loss_his) / N
         acc = sum(acc_his) / N

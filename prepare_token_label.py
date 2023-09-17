@@ -80,6 +80,10 @@ def main():
     logs_data[7023]["label"] = [0, 5, 0, 0, 0, 6, 0]
     for idx, v in enumerate(logs_data):
         logs_data[idx]["sentence"] = clean_text(annotations[idx]["sentence"])
+        logs_data[idx]["intent"] = annotations[idx]["intent"]
+        intent = annotations[idx]["intent"].lower()
+        intent = intent[0].upper() + intent[1:]
+        logs_data[idx]["intent_label"] = utils.MAP_INTENT[intent]
     
     logs_data = {k["file"]: v for k, v in zip(annotations, logs_data)}
 

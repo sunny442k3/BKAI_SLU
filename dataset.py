@@ -51,10 +51,9 @@ class Wav2VecDataset(Dataset):
         return data
 
 class BertDataset(Dataset):
-    def __init__(self, all_text, labels=None, map_intent=None):
+    def __init__(self, all_text, all_data=None): 
         self.all_text = all_text
-        self.labels = labels # [Token cls, Intent cls]
-        self.map_intent = {k.lower().strip(): v for k, v in map_intent.items()} if map_intent is not None else None
+        self.all_data = all_data
 
     def _process_data(self, idx):
         chars_to_ignore_regex = '[\,\?\.\!\-\;\'\"]'
@@ -62,11 +61,11 @@ class BertDataset(Dataset):
         text = clean_txt(self.all_text[idx])
         while "  " in text:
             text = text.replace("  ", " ")
-        # label = clean_txt(self.annotations[idx]["sentence_annotation"])
-        if self.labels is None or self.map_intent is None:
+        if self.all_data is None:
             return text, None, None
-        token_label = [0] + self.labels[0][idx] + [0]
-        intent_label = [self.map_intent[self.labels[1][idx].lower()]]
+        token_label = self.all_data[idx]["token_label"] if "token_label" in self.all_data[idx] else self.all_data[idx]["label"]
+        token_label = [0] + token_label + [0]
+        intent_label = self.all_data[idx]["intent_label"]
         return text, token_label, intent_label
 
     def __len__(self):
