@@ -2,7 +2,7 @@ import utils
 import json 
 import copy
 
-
+# text_data = json.load(open("./dataset/4gram_test_sentences_v3_32w.json", "r", encoding="utf-8"))
 def fix_type1(data, intent, word):
     change = []
     new_data = []
@@ -15,7 +15,7 @@ def fix_type1(data, intent, word):
         fc = lambda x: x["type"] == "command" and x["filler"] == word
         g = [fc(j) for j in record["entities"]]
         new_entities = copy.deepcopy(record["entities"])
-        if sum(g) == 0:
+        if sum(g) == 0: # and (word in text_data[record["file"]].lower())
             change.append(record["file"])
             new_entities += [{"type": "command", "filler": word}]
         record["entities"] = copy.deepcopy(new_entities)
@@ -65,7 +65,7 @@ def fix_cmd(data):
     return new_data, all_change
 
 def main():
-    data = utils.load_annotation("../submission/predictions.jsonl")
+    data = utils.load_annotation("../submission/predictions_best_0.8_none_align.jsonl")
     new_data, all_change = fix_cmd(copy.deepcopy(data))
     new_data = fix_miss_field(copy.deepcopy(new_data))
     import json

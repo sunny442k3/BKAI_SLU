@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from transformers import RobertaModel, Wav2Vec2ForCTC
 import transformers.models.wav2vec2.modeling_wav2vec2 as lib
+from mldecoder import MLDecoder
 
 class BertSLU(torch.nn.Module):
 
@@ -42,7 +43,19 @@ class BertSLUV2(BertSLU):
         intent_out = self.intent_classifier(h.sum(dim=1)) if self.train_mode == "intent_class" else None
         return token_out, intent_out 
     
-    
+class BertSLUV3(BertSLUV2):
+
+    def __init__(self, *args, **kwargs):
+        super(BertSLUV3, self).__init__(*args, **kwargs)
+        if self.train_mode == "intent_class":
+            self.intent_classifier = MLDecoder(num_classes=self.n_intent_classes)
+
+    def forward(self, inputs):
+        h = self.model(**inputs).last_hidden_state 
+        token_out = self.token_classifier(h) if self.train_mode == "token_class" else None
+        intent_out = self.intent_classifier(h) if self.train_mode == "intent_class" else None
+        return token_out, intent_out 
+
 class GICLayer(nn.Module):
     def __init__(self, vocab_size=111, embedding_dim=1024):
         super(GICLayer, self).__init__()
