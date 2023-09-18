@@ -26,6 +26,22 @@ class BertSLU(torch.nn.Module):
         intent_out = self.intent_classifier(h[:, -1, :])
         return token_out, intent_out 
     
+class BertSLUV2(BertSLU):
+
+    def __init__(self, train_mode="token_class", *args, **kwargs):
+        super(BertSLUV2, self).__init__(*args, **kwargs)
+        self.train_mode = train_mode 
+        if self.train_mode == "token_class":
+            del self.intent_classifier
+        else:
+            del self.token_classifier
+
+    def forward(self, inputs):
+        h = self.model(**inputs).last_hidden_state 
+        token_out = self.token_classifier(h) if self.train_mode == "token_class" else None
+        intent_out = self.intent_classifier(h.sum(dim=1)) if self.train_mode == "intent_class" else None
+        return token_out, intent_out 
+    
     
 class GICLayer(nn.Module):
     def __init__(self, vocab_size=111, embedding_dim=1024):

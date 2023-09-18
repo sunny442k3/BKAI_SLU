@@ -65,7 +65,7 @@ def fix_cmd(data):
     return new_data, all_change
 
 def main():
-    data = utils.load_annotation("../submission/predictions_oldSLU_best_score.jsonl")
+    data = utils.load_annotation("../submission/predictions.jsonl")
     new_data, all_change = fix_cmd(copy.deepcopy(data))
     new_data = fix_miss_field(copy.deepcopy(new_data))
     import json
